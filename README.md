@@ -90,8 +90,8 @@ The loop:
 
 1. **Act:** the model writes code.
 2. **Feedback:** hidden tests run in a temp folder. The model only sees which cases failed.
-3. **Reflect:** the model writes a one-sentence lesson about its failure.
-4. **Retry** with all lessons so far in its prompt.
+3. **Reflect:** the model traces a failing input through its code, then writes a short lesson.
+4. **Retry** with all lessons so far, plus its last attempt and what failed.
 
 No model weights change. What improves is the agent's memory of its own mistakes. This is inspired by the [Reflexion](https://arxiv.org/abs/2303.11366) approach.
 
@@ -104,7 +104,16 @@ set -a && source .env && set +a   # load it into your shell
 python Demo_2/demo2_reflexion_agent.py
 ```
 
-Every run is a little different. Sometimes the agent gets there in two attempts, sometimes four. You can change the model with `DEMO_MODEL` in `.env`. `.env` is git-ignored, so your key stays out of the repo.
+Every run is a little different. Sometimes the agent gets there in two attempts, sometimes more. You can change the model with `DEMO_MODEL` in `.env`. `.env` is git-ignored, so your key stays out of the repo.
+
+### Run it on-device
+
+```bash
+ollama serve & ollama pull qwen2.5-coder:3b    # one-time setup, see Demo_2/README.md
+python Demo_2/demo2_reflexion_agent.py --local
+```
+
+Uses Qwen2.5-Coder 3B on your own laptop through [Ollama](https://ollama.com). No API key, and nothing leaves the machine. It's slower than Gemini and usually reaches 6/8 or 7/8 rather than 8/8.
 
 ### Run it offline
 
@@ -112,7 +121,83 @@ Every run is a little different. Sometimes the agent gets there in two attempts,
 python Demo_2/demo2_reflexion_agent.py --mock
 ```
 
-Uses a scripted fake model, so you can see the full loop without an API key or internet connection.
+Replays a real model run saved in `Demo_2/mock_run.json`, so you can see the full loop without a model, an API key or internet. Add `--record` to any real run to save a new one.
+
+### What you'll see (mock mode)
+
+```
+(replaying a recorded run of qwen2.5-coder:3b)
+
+=== Attempt 1: PASSED 6/8 ===
+FAIL: parse_amount('1.5m') returned 15, expected 1500000
+FAIL: parse_amount('20k') returned 20, expected 20000
+Lesson stored: The code should check for the presence of 'm' or 'k' suffixes
+and multiply the result by 1,000,000 or 1,000...
+
+=== Attempt 2: PASSED 7/8 ===
+FAIL: parse_amount('1.5m') returned 15000000, expected 1500000
+...
+```
+
+A real on-device run: a 3B model improves from 6/8 to 7/8 using its own lessons, then hits the limit of what it can do. Gemini usually gets to 8/8.
+
+### Things to try
+
+- Change `decay` in `ThompsonRouter`. Set it to `1.0` (never forget) and watch the router take much longer to notice the outage. Set it very low and watch it overreact to noise.
+- Edit `SUCCESS_RATES`, `DRIFTED` and `DRIFT_AT` to simulate your own outage scenarios.
+- Add fees or latency to the reward. What happens if you reward **only** speed?
+
+---
+
+## Demo 2: An agent that critiques itself and tries again
+
+**Folder:** [`Demo_2/`](Demo_2/) · full walkthrough in [Demo_2/README.md](Demo_2/README.md)
+
+An LLM agent has to write `parse_amount()`, a function that turns messy, human-written payment amounts into integers:
+
+| Input             | Expected  |
+| ----------------- | --------- |
+| `"UGX 1,250,000"` | `1250000` |
+| `"20k"`           | `20000`   |
+| `"1.5m"`          | `1500000` |
+| `"Frw 3.000"`     | `3000`    |
+
+The loop:
+
+1. **Act:** the model writes code.
+2. **Feedback:** hidden tests run in a temp folder. The model only sees which cases failed.
+3. **Reflect:** the model traces a failing input through its code, then writes a short lesson.
+4. **Retry** with all lessons so far, plus its last attempt and what failed.
+
+No model weights change. What improves is the agent's memory of its own mistakes. This is inspired by the [Reflexion](https://arxiv.org/abs/2303.11366) approach.
+
+### Run it with a real model
+
+```bash
+pip install -r requirements.txt
+cp .env.example .env              # then put your Gemini key in .env
+set -a && source .env && set +a   # load it into your shell
+python Demo_2/demo2_reflexion_agent.py
+```
+
+Every run is a little different. Sometimes the agent gets there in two attempts, sometimes more. You can change the model with `DEMO_MODEL` in `.env`. `.env` is git-ignored, so your key stays out of the repo.
+
+### Run it on-device
+
+```bash
+ollama serve & ollama pull qwen2.5-coder:3b    # one-time setup, see Demo_2/README.md
+python Demo_2/demo2_reflexion_agent.py --local
+```
+
+Uses Qwen2.5-Coder 3B on your own laptop through [Ollama](https://ollama.com). No API key, and nothing leaves the machine. It's slower than Gemini and usually reaches 6/8 or 7/8 rather than 8/8.
+
+### Run it offline
+
+```bash
+python Demo_2/demo2_reflexion_agent.py --mock
+```
+
+Replays a real model run saved in `Demo_2/mock_run.json`, so you can see the full loop without a model, an API key or internet. Add `--record` to any real run to save a new one.
 
 ### What you'll see (mock mode)
 

@@ -11,29 +11,42 @@ Run:   pip install google-genai
        export GEMINI_API_KEY=...
        python demo2_reflexion_agent.py
 
-Offline rehearsal (no API key, scripted model):  python demo2_reflexion_agent.py --mock
+On-device model (no internet, via Ollama):     python demo2_reflexion_agent.py --local
+Save a real run for offline replay:            python demo2_reflexion_agent.py --local --record
+Replay the saved run (no model at all):        python demo2_reflexion_agent.py --mock
 """
 import argparse
+import json
 import os
 import re
 import subprocess
 import sys
 import tempfile
 import textwrap
+import urllib.request
 
 MODEL = os.environ.get("DEMO_MODEL", "gemini-3.5-flash")
-MAX_ATTEMPTS = 4
+LOCAL_MODEL = os.environ.get("LOCAL_MODEL", "qwen2.5-coder:3b")
+MOCK_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mock_run.json")
+MAX_ATTEMPTS = int(os.environ.get("DEMO_ATTEMPTS", 6))
 
 TASK = textwrap.dedent("""
     Write a Python function `parse_amount(text: str) -> int` that turns a
     payment amount written by a person into an integer number of currency units.
-    Return only the code in a single ```python block.
+    Return only the code in a single ```python block, with no explanation,
+    no example usage and no print statements.
 """).strip()
 
 # The tests are the reward signal. The model never sees the full suite;
 # it only sees the cases it failed. Deliberately full of real-world messiness.
 TESTS = textwrap.dedent("""
-    from solution import parse_amount
+    try:
+        from solution import parse_amount
+    except Exception as e:                 # e.g. a crashing example call at the bottom of the file
+        print("PASSED 0/8")
+        print(f"FAIL: importing your code raised {type(e).__name__}: {e}. "
+              "Remove any code outside the function.")
+        raise SystemExit
     cases = [
         ("UGX 1,250,000", 1250000),
         ("RWF 5000", 5000),
@@ -71,31 +84,42 @@ def call_llm(prompt: str) -> str:
                  "Network or model trouble. Re-run with --mock to show the loop offline.")
 
 
-MOCK_SCRIPT = iter([
-    # attempt 1: naive
-    "```python\ndef parse_amount(text):\n    return int(''.join(c for c in text if c.isdigit()))\n```",
-    "Suffixes like k and m multiply the number, and decimals were destroyed.",
-    # attempt 2: handles suffixes, still breaks '3.000'
-    "```python\nimport re\ndef parse_amount(text):\n    t = text.lower().replace(',', '').replace(' ', '')\n"
-    "    t = re.sub(r'[a-z]+$', lambda m: m.group() if m.group() in ('k','m') else '', t)\n"
-    "    t = re.sub(r'^[a-z]+', '', t)\n    mult = 1\n"
-    "    if t.endswith('k'): mult, t = 1000, t[:-1]\n"
-    "    elif t.endswith('m'): mult, t = 1000000, t[:-1]\n"
-    "    return int(float(t) * mult)\n```",
-    "A dot followed by exactly three digits with no suffix is a thousands separator, not a decimal.",
-    # attempt 3: correct
-    "```python\nimport re\ndef parse_amount(text):\n    t = text.lower().replace(',', '').replace(' ', '')\n"
-    "    t = re.sub(r'^[a-z]+', '', t)\n    mult = 1\n"
-    "    if t.endswith('k'): mult, t = 1000, t[:-1]\n"
-    "    elif t.endswith('m'): mult, t = 1000000, t[:-1]\n"
-    "    else: t = re.sub(r'[a-z]+$', '', t)\n"
-    "    if mult == 1 and re.fullmatch(r'\\d{1,3}(\\.\\d{3})+', t):\n        t = t.replace('.', '')\n"
-    "    return int(round(float(t) * mult))\n```",
-])
+def local_llm(prompt: str) -> str:
+    """On-device model served by Ollama on this machine. Nothing leaves the laptop."""
+    req = urllib.request.Request(
+        "http://localhost:11434/api/generate",
+        data=json.dumps({"model": LOCAL_MODEL, "prompt": prompt, "stream": False,
+                         "keep_alive": "30m",                  # stay loaded between calls
+                         "options": {"temperature": 0.2, "num_predict": 600}}).encode(),
+        headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=300) as r:     # CPU-only laptops are slow
+            return json.load(r)["response"]
+    except Exception as e:
+        sys.exit(f"\nLocal model call failed ({type(e).__name__}: {e})\n"
+                 f"Is Ollama running? Try: ollama serve  and  ollama pull {LOCAL_MODEL}\n"
+                 "Or re-run with --mock to replay a saved run.")
 
 
-def mock_llm(prompt: str) -> str:
-    return next(MOCK_SCRIPT)
+def mock_llm_from_file():
+    """Replays a run saved with --record, reply by reply. Same tests, so same path."""
+    with open(MOCK_FILE) as f:
+        saved = json.load(f)
+    print(f"(replaying a recorded run of {saved['model']})")
+    replies = iter(saved["replies"])
+    return lambda prompt: next(replies)
+
+
+def recording(llm, model):
+    """Wraps a model so every reply is kept; main() saves them when the run finishes."""
+    replies = []
+    def wrapped(prompt):
+        reply = llm(prompt)
+        replies.append(reply)
+        return reply
+    wrapped.save = lambda: json.dump({"model": model, "replies": replies},
+                                     open(MOCK_FILE, "w"), indent=2)
+    return wrapped
 
 
 # ---------------------------------------------------------------- environment
@@ -116,16 +140,20 @@ def run_tests(code: str) -> tuple[bool, str]:
             out = (r.stdout + r.stderr).strip()
         except subprocess.TimeoutExpired:
             out = "FAIL: code timed out"
+    report = [l for l in out.splitlines() if l.startswith(("PASSED", "FAIL"))]
+    if any(l.startswith("PASSED") for l in report):
+        out = "\n".join(report)              # drop anything the agent's own code printed
     passed = out.startswith("PASSED") and "FAIL" not in out
     return passed, out
 
 
 # ---------------------------------------------------------------- the loop
 def main(llm):
-    lessons: list[str] = []          # the agent's memory: this is what "improves"
+    lessons: list[str] = []          # long-term memory: this is what "improves"
+    last = ""                        # short-term memory: the previous attempt and its failures
     for attempt in range(1, MAX_ATTEMPTS + 1):
         memory = "\n".join(f"- {l}" for l in lessons) or "(none yet)"
-        prompt = f"{TASK}\n\nLessons from your previous attempts:\n{memory}"
+        prompt = f"{TASK}\n\nLessons from your previous attempts:\n{memory}{last}"
 
         code = extract_code(llm(prompt))                    # ACT
         passed, feedback = run_tests(code)                  # FEEDBACK
@@ -140,13 +168,19 @@ def main(llm):
         print("\n".join(feedback.splitlines()[1:]))
         if attempt == MAX_ATTEMPTS:
             break                                            # no retry left to use a lesson
-        lesson = llm(                                        # REFLECT
+        reflection = llm(                                    # REFLECT
             "You wrote this code:\n```python\n" + code + "\n```\n"
             "It failed these tests:\n" + feedback + "\n\n"
-            "In one or two sentences, state the general lesson you should remember "
-            "next time. Do not write code."
-        ).strip()
+            "First, take one failing input and trace what your code does to it, line by line, "
+            "to find where it goes wrong. Then, on a final line starting with 'Lesson:', "
+            "state in one or two sentences the rule for handling the failing inputs correctly. "
+            "Do not write code."
+        )
+        parts = re.split(r"\**lesson\**\s*:\**", reflection, flags=re.I)  # keep the lesson, drop the trace
+        lesson = (parts[-1] if len(parts) > 1 else reflection.strip().splitlines()[-1]).strip(" *\n")
         lessons.append(lesson)
+        last = (f"\n\nYour last attempt:\n```python\n{code}\n```\n"
+                f"It failed these cases:\n{feedback}\nFix every failing case.")
         print(f"\nLesson stored: {lesson}")
 
     print("\nOut of attempts. Lessons learned:", *lessons, sep="\n- ")
@@ -154,6 +188,19 @@ def main(llm):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("--mock", action="store_true", help="scripted model, no API key needed")
+    ap.add_argument("--mock", action="store_true", help="replay the saved run in mock_run.json, no model needed")
+    ap.add_argument("--local", action="store_true", help="use an on-device model via Ollama instead of Gemini")
+    ap.add_argument("--record", action="store_true", help="save this run to mock_run.json for --mock")
     args = ap.parse_args()
-    main(mock_llm if args.mock else call_llm)
+
+    if args.mock:
+        llm = mock_llm_from_file()
+    else:
+        llm, model = (local_llm, LOCAL_MODEL) if args.local else (call_llm, MODEL)
+        print(f"(model: {model})")
+        if args.record:
+            llm = recording(llm, model)
+    main(llm)
+    if args.record and not args.mock:
+        llm.save()
+        print(f"\nSaved this run to {MOCK_FILE}. Replay it with --mock.")
