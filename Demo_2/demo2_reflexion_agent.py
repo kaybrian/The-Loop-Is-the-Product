@@ -8,7 +8,7 @@ No model weights change. The improvement lives in the memory of lessons.
 The reward is objective: tests pass or they don't.
 
 Run:   pip install google-genai
-       export GEMINI_API_KEY=...
+       put GEMINI_API_KEY in .env at the repo root (or export it)
        python demo2_reflexion_agent.py
 
 On-device model (no internet, via Ollama):     python demo2_reflexion_agent.py --local
@@ -25,7 +25,16 @@ import tempfile
 import textwrap
 import urllib.request
 
-MODEL = os.environ.get("DEMO_MODEL", "gemini-3.5-flash")
+# Read KEY=value lines from the repo's .env, so no shell setup is needed on any OS.
+# Variables already set in the environment win.
+ENV_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
+if os.path.exists(ENV_FILE):
+    for line in open(ENV_FILE):
+        key, sep, value = line.strip().partition("=")
+        if sep and not key.startswith("#"):
+            os.environ.setdefault(key.strip(), value.strip().strip('"\''))
+
+MODEL =os.environ.get("DEMO_MODEL", "gemini-3.5-flash")
 LOCAL_MODEL = os.environ.get("LOCAL_MODEL", "qwen2.5-coder:3b")
 MOCK_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mock_run.json")
 MAX_ATTEMPTS = int(os.environ.get("DEMO_ATTEMPTS", 6))

@@ -13,7 +13,7 @@ An LLM agent writes a parser for messy payment amounts. It fails some tests, wri
 | **Reflect** | The model traces a failing input through its code, then writes a one- or two-sentence lesson |
 | **Retry** | The next attempt gets every lesson so far, plus its last code and the cases that failed |
 
-The agent gets up to 6 attempts. Change this with `DEMO_ATTEMPTS`.
+The agent gets up to 6 attempts. You can change this with `DEMO_ATTEMPTS` (see [Settings](#settings)).
 
 ## The task
 
@@ -32,62 +32,93 @@ Write `parse_amount(text: str) -> int`, which turns a human-written amount into 
 
 The reward is objective: the tests pass or they don't.
 
-## Run it offline (no API key)
+## Before you start
 
-```bash
-python Demo_2/demo2_reflexion_agent.py --mock
-```
+You need **Python 3.9 or newer**. What else you need depends on which mode you run:
 
-This replays a real model run saved in [`mock_run.json`](mock_run.json), reply by reply. You see the whole loop with genuine model output and no API key, internet or model needed. It's also the backup if the venue Wi-Fi fails.
+| Mode | Command | Needs | Good for |
+| --- | --- | --- | --- |
+| **Offline** | `--mock` | Nothing else | A first look, and the backup if the venue Wi-Fi fails |
+| **Gemini** | *(no flag)* | `google-genai` and a free API key | The best results. Usually passes all 8 tests |
+| **On-device** | `--local` | Ollama and a 1.9 GB model | No key and no internet. Nothing leaves your laptop |
 
-To save a fresh run to `mock_run.json`, add `--record` to any real run (Gemini or on-device). Because the tests are the same every time, the replay follows the same path the real model took.
+Run every command from the repo's top folder.
 
-## Run it with an on-device model
+## Mode 1: Offline
 
-The agent can use a small open model running on your laptop through [Ollama](https://ollama.com). Nothing goes over the network. The default is **Qwen2.5-Coder 3B**, a small open model trained for code.
+1. Run it:
+   ```bash
+   python Demo_2/demo2_reflexion_agent.py --mock
+   ```
 
-```bash
-brew install ollama          # or download it from ollama.com
-ollama serve                 # leave this running in its own terminal
-ollama pull qwen2.5-coder:3b # about 1.9 GB, one time
-python Demo_2/demo2_reflexion_agent.py --local
-```
+This replays a real model run saved in [`mock_run.json`](mock_run.json), reply by reply. You see the whole loop with genuine model output, and no model is involved. The tests are the same every time, so the replay follows exactly the path the real model took.
 
-To use another model, set `LOCAL_MODEL`, for example `LOCAL_MODEL=gemma3:1b`. Small models are slower and less reliable than Gemini, especially on a CPU-only laptop. On an 8 GB Intel Mac, a full run with the 3B model takes 3 to 8 minutes, and it usually reaches 6/8 or 7/8 rather than 8/8. Models of 1.5B and smaller rarely get past 6/8 on this task. For the talk, record a good run with `--record` and replay it with `--mock`.
+## Mode 2: Gemini
 
-## Run it with a real model
+1. **Install the Gemini SDK**, if you haven't run `pip install -r requirements.txt` already:
+   ```bash
+   pip install google-genai
+   ```
+2. **Get a free API key** from [Google AI Studio](https://aistudio.google.com/apikey).
+3. **Create your settings file:**
+   ```bash
+   cp .env.example .env
+   ```
+   On Windows, use `copy .env.example .env`.
+4. **Add your key.** Open `.env` and replace `your_key_here` with it. `.env` is git-ignored, so your key stays out of the repo. The script reads `.env` by itself, so there's nothing to export.
+5. **Run it:**
+   ```bash
+   python Demo_2/demo2_reflexion_agent.py
+   ```
 
-From the repo root, install the dependencies:
-
-```bash
-pip install -r requirements.txt
-```
-
-Copy the example env file, then put your Gemini API key in `.env` (get one free at [Google AI Studio](https://aistudio.google.com/apikey)):
-
-```bash
-cp .env.example .env
-```
-
-Load it into your shell (the script reads ordinary environment variables):
-
-```bash
-set -a && source .env && set +a
-```
-
-```bash
-python Demo_2/demo2_reflexion_agent.py
-```
-
-The default model is `gemini-3.5-flash`. To use a different one, change `DEMO_MODEL` in `.env`, or set it for a single run:
+The default model is `gemini-3.5-flash`. To use another one, change `DEMO_MODEL` in `.env`, or set it for a single run:
 
 ```bash
 DEMO_MODEL=gemini-pro-latest python Demo_2/demo2_reflexion_agent.py
 ```
 
-`.env` is git-ignored, so your key stays out of the repo.
+Every live run is a little different. Sometimes the agent gets there in two attempts, sometimes more, and sometimes it runs out of attempts and prints the lessons it learned. If Gemini is busy, the script gives up after a few tries and suggests `--mock`, so it never hangs on stage.
 
-Every live run is a little different. Sometimes the agent gets there in two attempts, sometimes more, and sometimes it runs out of attempts and prints the lessons it learned.
+## Mode 3: On-device
+
+The agent runs on a small open model on your own laptop, through [Ollama](https://ollama.com). The default is **Qwen2.5-Coder 3B**, a small model trained for code.
+
+1. **Install Ollama** from [ollama.com/download](https://ollama.com/download) and open the app. On Linux, run `ollama serve` in its own terminal instead.
+2. **Check that it's running:**
+   ```bash
+   ollama --version
+   ```
+3. **Download the model** (about 1.9 GB, one time):
+   ```bash
+   ollama pull qwen2.5-coder:3b
+   ```
+4. **Run it:**
+   ```bash
+   python Demo_2/demo2_reflexion_agent.py --local
+   ```
+
+To try another model, pull it and set `LOCAL_MODEL`, for example `LOCAL_MODEL=gemma3:1b`. Small models are slower and less reliable than Gemini, especially on a laptop without a GPU. On an 8 GB Intel Mac, a full run with the 3B model takes 3 to 8 minutes and usually reaches 6/8 or 7/8 rather than 8/8. Models of 1.5B and smaller rarely get past 6/8 on this task.
+
+## Record your own offline run
+
+Add `--record` to any real run. When the run finishes, it overwrites `mock_run.json`, and `--mock` replays it from then on:
+
+```bash
+python Demo_2/demo2_reflexion_agent.py --local --record
+```
+
+This is the safest way to show a real run on stage: record a good one before the talk, then replay it with `--mock`.
+
+## Settings
+
+Set these in `.env`, or in your shell for a single run:
+
+| Setting | Default | What it does |
+| --- | --- | --- |
+| `GEMINI_API_KEY` | *(none)* | Your Gemini key, needed for Gemini mode |
+| `DEMO_MODEL` | `gemini-3.5-flash` | Which Gemini model to use |
+| `LOCAL_MODEL` | `qwen2.5-coder:3b` | Which Ollama model `--local` uses |
+| `DEMO_ATTEMPTS` | `6` | How many attempts the agent gets |
 
 ## What you'll see (mock mode)
 
@@ -119,4 +150,4 @@ This is a real run of a 3B model on a CPU-only laptop. The lesson from attempt 1
 
 ## Safety note
 
-> ⚠️ The demo runs model-generated code in a temporary directory with a 10-second timeout. That's fine for a demo, but use a proper sandbox (a container, for example) before running untrusted generated code anywhere that matters.
+> **Warning:** the demo runs model-generated code in a temporary directory with a 10-second timeout. That's fine for a demo, but use a proper sandbox (a container, for example) before running untrusted generated code anywhere that matters.

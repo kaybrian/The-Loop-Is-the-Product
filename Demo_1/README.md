@@ -28,21 +28,43 @@ Two routers handle all 6,000 transactions:
 - **Fixed rule:** always sends everything through Rail A, the best rail at launch. This is what most of us ship.
 - **Learning router:** uses [Thompson sampling](https://en.wikipedia.org/wiki/Thompson_sampling). It keeps a Beta distribution for each rail, samples a plausible success rate from each one, routes to the highest sample, then updates that rail with the result. A `decay` factor slowly forgets old evidence so it can notice when things change.
 
+## Before you start
+
+- **Python 3.9 or newer.** The simulation itself uses only the standard library.
+- **`matplotlib`**, only for the live chart.
+
+If you followed the [quick start](../README.md#quick-start), you already have both. Otherwise:
+
+```bash
+pip install matplotlib
+```
+
 ## Run it
 
-```bash
-python Demo_1/demo1_bandit_router.py
-```
+Run these from the repo's top folder.
 
-To watch it learn live (needs `matplotlib`), run:
+1. **Watch it learn on a live chart:**
+   ```bash
+   python Demo_1/demo1_bandit_router.py --plot
+   ```
+   A chart opens and draws itself as transactions happen:
+   - **Top panel:** each router's success rate over the last 500 transactions.
+   - **Bottom panel:** where the learning router sends its traffic. Watch it leave Rail A after the outage at transaction 3,000.
+   - **Title:** a running count of how many more payments the learning router has completed since the outage.
 
-```bash
-python Demo_1/demo1_bandit_router.py --plot
-```
+   When the run ends, the summary prints in the terminal and the chart stays open until you close it.
 
-The chart draws itself as transactions happen. The top panel shows each router's rolling success rate. The bottom panel shows where the learning router sends its traffic, so you can see it leave Rail A after the outage. The title keeps a running count of payments saved. To slow it down while you talk, add `--speed 10`; the default is 25 transactions per frame, and lower is slower.
+2. **Slow it down while you talk.** `--speed` sets how many transactions go through per chart frame. The default is 25. Lower is slower:
+   ```bash
+   python Demo_1/demo1_bandit_router.py --plot --speed 10
+   ```
 
-Run from the repo root. Python 3.9+ and no other dependencies (`pip install -r requirements.txt` covers the plot). The random seed is fixed, so you get the same numbers every run.
+3. **Just the numbers, no chart:**
+   ```bash
+   python Demo_1/demo1_bandit_router.py
+   ```
+
+The random seed is fixed, so you get the same numbers every run.
 
 ## What you'll see
 
@@ -71,5 +93,5 @@ Two things to notice:
 
 - **Change `decay`** in `ThompsonRouter` (default `0.995`). At `1.0` (never forget), old evidence about Rail A keeps it in use long after the outage, and the after-outage success rate falls to about 79%. At `0.9` it forgets so fast that it keeps chasing noise and spreads traffic across all three rails.
 - **Write your own outage** by editing `SUCCESS_RATES`, `DRIFTED` and `DRIFT_AT` at the top of the file.
-- **Change the seed** in `run(router, seed=7)` to check the result isn't a lucky draw.
+- **Change the seed** in `simulate(router, seed=7)` to check the result isn't a lucky draw.
 - **Change the reward.** Add fees or latency to it. What happens if you reward **only** speed?
