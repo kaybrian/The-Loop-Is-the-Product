@@ -48,7 +48,7 @@ From the repo root, install the dependencies:
 pip install -r requirements.txt
 ```
 
-Copy the example env file, then put your Anthropic API key in `.env`:
+Copy the example env file, then put your Gemini API key in `.env` (get one free at [Google AI Studio](https://aistudio.google.com/apikey)):
 
 ```bash
 cp .env.example .env
@@ -64,10 +64,10 @@ set -a && source .env && set +a
 python Demo_2/demo2_reflexion_agent.py
 ```
 
-The default model is `claude-sonnet-5-5`. To use a different one, change `DEMO_MODEL` in `.env`, or set it for a single run:
+The default model is `gemini-3.5-flash`. To use a different one, change `DEMO_MODEL` in `.env`, or set it for a single run:
 
 ```bash
-DEMO_MODEL=claude-opus-5-5 python Demo_2/demo2_reflexion_agent.py
+DEMO_MODEL=gemini-pro-latest python Demo_2/demo2_reflexion_agent.py
 ```
 
 `.env` is git-ignored, so your key stays out of the repo.

@@ -1,2 +1,2 @@
-anthropic    # Demo 2, live mode only (--mock needs nothing)
-matplotlib   # Demo 1, --plot only
+google-genai  # Demo 2, live mode only (--mock needs nothing)
+matplotlib    # Demo 1, --plot only

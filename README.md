@@ -89,7 +89,7 @@ An LLM agent has to write `parse_amount()`, a function that turns messy, human-w
 The loop:
 
 1. **Act:** the model writes code.
-2. **Feedback:** hidden tests run in a sandbox. The model only sees which cases failed.
+2. **Feedback:** hidden tests run in a temp folder. The model only sees which cases failed.
 3. **Reflect:** the model writes a one-sentence lesson about its failure.
 4. **Retry** with all lessons so far in its prompt.
 
@@ -99,7 +99,7 @@ No model weights change. What improves is the agent's memory of its own mistakes
 
 ```bash
 pip install -r requirements.txt
-cp .env.example .env              # then put your key in .env
+cp .env.example .env              # then put your Gemini key in .env
 set -a && source .env && set +a   # load it into your shell
 python Demo_2/demo2_reflexion_agent.py
 ```

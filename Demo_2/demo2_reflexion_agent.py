@@ -7,8 +7,8 @@ The loop:  ACT (write code) -> FEEDBACK (run real tests) ->
 No model weights change. The improvement lives in the memory of lessons.
 The reward is objective: tests pass or they don't.
 
-Run:   pip install anthropic
-       export ANTHROPIC_API_KEY=...
+Run:   pip install google-genai
+       export GEMINI_API_KEY=...
        python demo2_reflexion_agent.py
 
 Offline rehearsal (no API key, scripted model):  python demo2_reflexion_agent.py --mock
@@ -21,7 +21,7 @@ import sys
 import tempfile
 import textwrap
 
-MODEL = os.environ.get("DEMO_MODEL", "claude-sonnet-5-5")
+MODEL = os.environ.get("DEMO_MODEL", "gemini-3.5-flash")
 MAX_ATTEMPTS = 4
 
 TASK = textwrap.dedent("""
@@ -60,11 +60,15 @@ TESTS = textwrap.dedent("""
 
 # ---------------------------------------------------------------- model calls
 def call_llm(prompt: str) -> str:
-    import anthropic
-    client = anthropic.Anthropic()
-    msg = client.messages.create(model=MODEL, max_tokens=1500,
-                                 messages=[{"role": "user", "content": prompt}])
-    return "".join(b.text for b in msg.content if b.type == "text")
+    from google import genai
+    from google.genai import types
+    client = genai.Client(http_options=types.HttpOptions(   # reads GEMINI_API_KEY
+        timeout=60_000, retry_options=types.HttpRetryOptions(attempts=3)))  # don't hang on stage
+    try:
+        return client.models.generate_content(model=MODEL, contents=prompt).text or ""
+    except Exception as e:
+        sys.exit(f"\nGemini call failed ({type(e).__name__}: {str(e)[:200]})\n"
+                 "Network or model trouble. Re-run with --mock to show the loop offline.")
 
 
 MOCK_SCRIPT = iter([
