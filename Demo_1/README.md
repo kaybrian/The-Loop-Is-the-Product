@@ -34,11 +34,13 @@ Two routers handle all 6,000 transactions:
 python Demo_1/demo1_bandit_router.py
 ```
 
-To also draw the rolling success-rate chart (needs `matplotlib`):
+To watch it learn live (needs `matplotlib`), run:
 
 ```bash
 python Demo_1/demo1_bandit_router.py --plot
 ```
+
+The chart draws itself as transactions happen. The top panel shows each router's rolling success rate. The bottom panel shows where the learning router sends its traffic, so you can see it leave Rail A after the outage. The title keeps a running count of payments saved. To slow it down while you talk, add `--speed 10`; the default is 25 transactions per frame, and lower is slower.
 
 Run from the repo root. Python 3.9+ and no other dependencies (`pip install -r requirements.txt` covers the plot). The random seed is fixed, so you get the same numbers every run.
 

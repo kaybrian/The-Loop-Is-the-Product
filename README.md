@@ -39,10 +39,10 @@ Halfway through, the best rail degrades and another one improves. Nobody tells e
 
 ```bash
 python Demo_1/demo1_bandit_router.py           # results in the terminal
-python Demo_1/demo1_bandit_router.py --plot    # also draws the chart (needs matplotlib)
+python Demo_1/demo1_bandit_router.py --plot    # live chart: watch it learn as it runs (needs matplotlib)
 ```
 
-No dependencies beyond Python 3.9+. For the plot, `pip install -r requirements.txt` (or just `matplotlib`).
+No dependencies beyond Python 3.9+. For the plot, `pip install -r requirements.txt` (or just `matplotlib`). Add `--speed 10` to slow it down while you narrate (default 25 transactions per frame).
 
 ### What you'll see
 

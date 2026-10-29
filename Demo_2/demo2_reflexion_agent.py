@@ -30,8 +30,8 @@ TASK = textwrap.dedent("""
     Return only the code in a single ```python block.
 """).strip()
 
-# The tests are the reward signal. The model never sees them; it only
-# sees which ones failed. Deliberately full of real-world messiness.
+# The tests are the reward signal. The model never sees the full suite;
+# it only sees the cases it failed. Deliberately full of real-world messiness.
 TESTS = textwrap.dedent("""
     from solution import parse_amount
     cases = [
@@ -96,12 +96,13 @@ def mock_llm(prompt: str) -> str:
 
 # ---------------------------------------------------------------- environment
 def extract_code(reply: str) -> str:
-    m = re.search(r"```python\s*(.*?)```", reply, re.S)
+    m = re.search(r"```(?:python|py)?\s*\n(.*?)```", reply, re.S)
     return m.group(1) if m else reply
 
 
 def run_tests(code: str) -> tuple[bool, str]:
-    """The environment. Runs the agent's code against hidden tests in a temp dir."""
+    """The environment. Runs the agent's code against hidden tests in a temp dir.
+    Not a sandbox: the code runs as you. Use a container for anything real."""
     with tempfile.TemporaryDirectory() as d:
         open(os.path.join(d, "solution.py"), "w").write(code)
         open(os.path.join(d, "test_solution.py"), "w").write(TESTS)
@@ -133,6 +134,8 @@ def main(llm):
             return
 
         print("\n".join(feedback.splitlines()[1:]))
+        if attempt == MAX_ATTEMPTS:
+            break                                            # no retry left to use a lesson
         lesson = llm(                                        # REFLECT
             "You wrote this code:\n```python\n" + code + "\n```\n"
             "It failed these tests:\n" + feedback + "\n\n"
